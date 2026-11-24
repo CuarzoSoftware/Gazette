@@ -43,7 +43,7 @@ public:
     /// Updates its banner if shown (a notification replaced, same id).
     void replace(std::shared_ptr<Notification> notification) noexcept;
 
-    /// Removes its banner (if shown) right away.
+    /// Slides its banner out (if shown), it's destroyed once out (e.g. the notification was closed or expired).
     void remove(UInt32 id) noexcept;
 
     /// Slides every banner out (e.g. the notification center was opened).

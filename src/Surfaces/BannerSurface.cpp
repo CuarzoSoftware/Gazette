@@ -91,8 +91,13 @@ void BannerSurface::show(std::shared_ptr<Notification> notification) noexcept
         setSlide(*b, b->from + (b->to - b->from) * t);
     });
     b->anim.onFinish.subscribe(this, [this, b, id](CZAnimation*){
+        // Slid out: destroyed (later, it's its own animation)
         if (b->leaving)
-            CZTimer::OneShot(0, [this, id](CZTimer*){ remove(id); });
+            CZTimer::OneShot(0, [this, id](CZTimer*){
+                for (auto &banner : m_banners)
+                    if (banner->leaving && banner->card->notification()->id == id)
+                        return destroy(banner.get());
+            });
     });
 
     // Slides in from the screen's edge
@@ -108,11 +113,12 @@ void BannerSurface::show(std::shared_ptr<Notification> notification) noexcept
     // Later: it may be destroyed (closed if transient)
     b->timer.setCallback([this, id](CZTimer*){
         CZTimer::OneShot(0, [this, id](CZTimer*){
-            GetGazette()->bannerExpired(id);
-
             for (auto &banner : m_banners)
                 if (banner->card->notification()->id == id)
                     leave(*banner);
+
+            // Transient ones are closed (their banner keeps sliding out, see remove())
+            GetGazette()->bannerExpired(id);
         });
     });
 
@@ -154,7 +160,7 @@ void BannerSurface::remove(UInt32 id) noexcept
     {
         if (banner->card->notification()->id == id)
         {
-            destroy(banner.get());
+            leave(*banner);
             return;
         }
     }
