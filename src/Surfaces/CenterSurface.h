@@ -30,12 +30,15 @@
 class CenterSurface final : public MLayerSurface
 {
 public:
-    static constexpr UInt32 ShowMs { 320 };
+    static constexpr UInt32 ShowMs { 320 }; ///< Sliding in
     static constexpr UInt32 HideMs { 220 }; ///< Ease-out too: it moves right away
 
     CenterSurface() noexcept;
 
+    /// Slides in on @p screen (nullptr: the compositor chooses; Gazette passes screenNamed()).
     void show(MScreen *screen) noexcept;
+
+    /// Slides out.
     void hide() noexcept;
 
     /// Shown or showing (false while sliding out).

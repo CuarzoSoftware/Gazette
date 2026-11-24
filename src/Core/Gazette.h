@@ -24,7 +24,7 @@ class CenterSurface;
  *   Disturb is on. Banners hide after a while (critical ones and those with expire_timeout 0 stay),
  *   the notification stays in the notification center.
  * - The notification center (see CenterSurface) slides from the right: Do Not Disturb and the
- *   list. Toggled by Firmament's notifications button (org.cuarzo.Gazette.ToggleCenter, see Server).
+ *   list. Toggled by Firmament's notifications button (org.cuarzo.Gazette.ToggleCenter, see SNotificationsServer).
  *
  * Do Not Disturb is saved to ~/.config/cz-gazette/gazette.conf. Opening Exposé or switching
  * workspaces (Crystals' ExposeChanged and WorkspaceChanged signals) hides the notification center.
@@ -35,15 +35,16 @@ public:
     Gazette() noexcept;
     ~Gazette() noexcept;
 
-    std::shared_ptr<MApp> marco;
-    std::shared_ptr<XDGKit> xdgkit;
-    std::shared_ptr<ABCore> ab;
+    std::shared_ptr<MApp> marco;        ///< The Wayland app
+    std::shared_ptr<XDGKit> xdgkit;     ///< Icon themes and .desktop entries (apps' names and icons)
+    std::shared_ptr<ABCore> ab;         ///< Icons, shared with the other apps when the asset broker runs
     std::shared_ptr<SNotificationsServer> server; ///< The D-Bus side (see notify())
-    std::unique_ptr<BannerSurface> banners;
-    std::unique_ptr<CenterSurface> center;
+    std::unique_ptr<BannerSurface> banners;  ///< The banners
+    std::unique_ptr<CenterSurface> center;   ///< The notification center
 
     /// Newest first.
     const std::list<std::shared_ptr<Notification>> &notifications() const noexcept { return m_notifications; }
+    /// The notification with that id, nullptr if it's not there (anymore).
     std::shared_ptr<Notification> find(UInt32 id) const noexcept;
 
     /**
@@ -71,17 +72,27 @@ public:
     /// Closes every notification (Dismissed).
     void clearAll() noexcept;
 
+    /// Do Not Disturb: new notifications go to the center only (no banners).
     bool doNotDisturb() const noexcept { return m_dnd; }
+
+    /// Turns Do Not Disturb on or off (saved; turning it on hides the banners).
     void setDoNotDisturb(bool enabled) noexcept;
 
-    /// Shows / hides the notification center on @p screen (by name, the default screen if not found).
+    /// Shows or hides the notification center on @p screen (by name, the default screen if not found).
     void toggleCenter(const std::string &screen = {}) noexcept;
+
+    /// Shows the notification center on @p screen (by name, the default screen if not found).
     void showCenter(const std::string &screen = {}) noexcept;
+
+    /// Hides the notification center (sliding out).
     void hideCenter() noexcept;
+
+    /// The notification center is shown (or sliding in).
     bool centerShown() const noexcept;
 
     /// The screen at (0,0), else the first one.
     MScreen *defaultScreen() const noexcept;
+    /// The screen named @p name (e.g. "eDP-1"), else defaultScreen().
     MScreen *screenNamed(const std::string &name) const noexcept;
 
     /// Loads the app icon of @p n (its app_icon, else its .desktop entry's, else a generic one).
@@ -108,6 +119,7 @@ private:
     bool m_dnd { false };
 };
 
+/// The Gazette instance (made in main()).
 Gazette *GetGazette() noexcept;
 
 #endif // GAZETTE_H

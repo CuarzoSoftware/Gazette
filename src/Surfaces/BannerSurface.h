@@ -28,15 +28,16 @@
 class BannerSurface final : public MLayerSurface
 {
 public:
-    static constexpr size_t MaxBanners { 3 };
-    static constexpr UInt32 DefaultTimeoutMs { 5000 };
+    static constexpr size_t MaxBanners { 3 };           ///< Shown at once (the oldest leaves for a new one)
+    static constexpr UInt32 DefaultTimeoutMs { 5000 };  ///< How long a banner stays (expire_timeout -1)
     static constexpr UInt32 ShowMs { 380 }; ///< Sliding in
     static constexpr UInt32 HideMs { 220 }; ///< Sliding out or back (ease-out: moves right away)
-    static constexpr SkScalar DismissFraction { 0.3f };
-    static constexpr SkScalar DismissVelocity { 0.6f }; // Logical px per ms (a flick)
+    static constexpr SkScalar DismissFraction { 0.3f };  ///< Dragged this far (of its width) to the right: hidden
+    static constexpr SkScalar DismissVelocity { 0.6f };  ///< Or released this fast (logical px per ms, a flick)
 
     BannerSurface() noexcept;
 
+    /// Shows a banner for @p notification (sliding in, at the top).
     void show(std::shared_ptr<Notification> notification) noexcept;
 
     /// Updates its banner if shown (a notification replaced, same id).

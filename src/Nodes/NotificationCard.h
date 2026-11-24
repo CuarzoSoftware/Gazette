@@ -26,18 +26,28 @@
 class NotificationCard final : public AKRoundSolidColor
 {
 public:
-    enum class Style { Banner, List };
+    /// Where it's shown.
+    enum class Style
+    {
+        Banner, ///< A banner (BannerSurface)
+        List    ///< In the notification center (CenterSurface)
+    };
 
-    static constexpr SkScalar Width { 344.f };
-    static constexpr Int32 Radius { 16 };
+    static constexpr SkScalar Width { 344.f };  ///< Logical width (fixed)
+    static constexpr Int32 Radius { 16 };       ///< Corner radius
 
+    /// Shows @p notification in @p style.
     NotificationCard(std::shared_ptr<Notification> notification, Style style, AKNode *parent = nullptr) noexcept;
 
     /// Shows another notification (the same id replaced).
     void setNotification(std::shared_ptr<Notification> notification) noexcept;
+    /// The notification shown.
     const std::shared_ptr<Notification> &notification() const noexcept { return m_notification; }
 
+    /// Hovered by the pointer (its surface tells): the close button shows (list style).
     void setHovered(bool hovered) noexcept;
+
+    /// See setHovered().
     bool hovered() const noexcept { return m_hovered; }
 
     /// Updates the time text ("5m ago").
