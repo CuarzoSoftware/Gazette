@@ -2,6 +2,7 @@
 #define GAZETTE_H
 
 #include <Core/Notification.h>
+#include <CZ/Services/SNotificationsServer.h>
 #include <CZ/Core/CZObject.h>
 #include <CZ/Core/CZSignal.h>
 #include <filesystem>
@@ -11,7 +12,6 @@
 namespace CZ { class MApp; class MScreen; class XDGKit; class ABCore; class CZBus; }
 struct sd_bus_slot;
 
-class Server;
 class BannerSurface;
 class CenterSurface;
 
@@ -38,13 +38,20 @@ public:
     std::shared_ptr<MApp> marco;
     std::shared_ptr<XDGKit> xdgkit;
     std::shared_ptr<ABCore> ab;
-    std::unique_ptr<Server> server;
+    std::shared_ptr<SNotificationsServer> server; ///< The D-Bus side (see notify())
     std::unique_ptr<BannerSurface> banners;
     std::unique_ptr<CenterSurface> center;
 
     /// Newest first.
     const std::list<std::shared_ptr<Notification>> &notifications() const noexcept { return m_notifications; }
     std::shared_ptr<Notification> find(UInt32 id) const noexcept;
+
+    /**
+     * @brief A notification arrived (Notify, see SNotificationsServer): prepares it for showing
+     *        (plain text, the app's name, its icon and image) and adds it.
+     * @return Its id.
+     */
+    UInt32 notify(const SNotification &sent) noexcept;
 
     /**
      * @brief Adds @p n (or replaces the one with its id if it's still there, else it gets a new id).
@@ -83,7 +90,7 @@ public:
     /// Loads a themed icon by name.
     std::shared_ptr<RImage> loadIcon(const std::string &name, Int32 size) noexcept;
 
-    /// Center shown, Do Not Disturb or the count changed (see Server::emitState()).
+    /// Center shown, Do Not Disturb or the count changed (see SNotificationsServer::emitCenterState()).
     CZSignal<> onStateChanged;
 
     /// A notification was added, replaced or removed.

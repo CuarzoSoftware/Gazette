@@ -102,8 +102,8 @@ void BannerSurface::show(std::shared_ptr<Notification> notification) noexcept
     // Stays if critical or if asked (expire_timeout 0)
     const Notification &n { *notification };
 
-    if (n.urgency != Notification::Urgency::Critical && n.timeout != 0)
-        b->timeoutMs = n.timeout > 0 ? UInt32(n.timeout) : DefaultTimeoutMs;
+    if (n.urgency != Notification::Urgency::Critical && n.timeoutMs != 0)
+        b->timeoutMs = n.timeoutMs > 0 ? UInt32(n.timeoutMs) : DefaultTimeoutMs;
 
     // Later: it may be destroyed (closed if transient)
     b->timer.setCallback([this, id](CZTimer*){

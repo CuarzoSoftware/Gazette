@@ -252,10 +252,10 @@ void NotificationCard::setNotification(std::shared_ptr<Notification> notificatio
 
     const Notification &n { *m_notification };
     m_icon.setImage(n.icon);
-    m_image.setImage(n.image);
-    m_image.setVisible(n.image != nullptr);
+    m_image.setImage(n.picture);
+    m_image.setVisible(n.picture != nullptr);
 
-    const SkScalar textWidth { Width - 2 * Padding - IconSize - Gap - (n.image ? ImageSize + Gap : 0.f) };
+    const SkScalar textWidth { Width - 2 * Padding - IconSize - Gap - (n.picture ? ImageSize + Gap : 0.f) };
     m_app.setText(Elide(m_app, n.appName.empty() ? "Notification" : n.appName, textWidth - 70.f));
     updateTime();
 
@@ -266,14 +266,18 @@ void NotificationCard::setNotification(std::shared_ptr<Notification> notificatio
 
     m_buttons.clear();
 
-    for (const auto &action : n.actions)
+    // Buttons (not "default": that's clicking the notification)
+    for (const auto &[key, label] : n.actions)
     {
-        auto &button { m_buttons.emplace_back(std::make_unique<AKButton>(action.label, &m_actions)) };
+        if (key == "default")
+            continue;
+
+        auto &button { m_buttons.emplace_back(std::make_unique<AKButton>(label, &m_actions)) };
         button->layout().setFlex(1.f);
         button->setBackgroundColor(AKTheme::ControlFill);
         button->setHoverBackgroundColor(AKTheme::ControlHoverFill);
         button->setPressedBackgroundColor(AKTheme::ControlPressedFill);
-        button->onClick.subscribe(this, [this, key = action.key](const CZPointerButtonEvent &e){
+        button->onClick.subscribe(this, [this, key](const CZPointerButtonEvent &e){
             if (e.pressed || !m_notification)
                 return;
 
@@ -338,7 +342,7 @@ void NotificationCard::pointerButtonEvent(const CZPointerButtonEvent &e)
     // The default action (e.g. the app opens the chat), else it's just dismissed
     const UInt32 id { m_notification->id };
 
-    if (m_notification->hasDefault)
+    if (m_notification->hasDefault())
         Later([id]{ GetGazette()->invoke(id, "default"); });
     else
         Later([id]{ GetGazette()->close(id, Notification::CloseReason::Dismissed); });

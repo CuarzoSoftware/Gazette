@@ -16,6 +16,7 @@ cz_kay_dep          = dependency('cz-kay', fallback:['cz-kay', 'cz_kay_dep'])
 cz_marco_dep        = dependency('cz-marco', fallback:['cz-marco', 'cz_marco_dep'])
 cz_xdgkit_dep       = dependency('cz-xdgkit', fallback:['cz-xdgkit', 'cz_xdgkit_dep'])
 cz_asset_broker_dep = dependency('cz-asset-broker', fallback:['cz-asset-broker', 'cz_asset_broker_dep'])
+cz_services_dep     = dependency('cz-services', fallback:['cz-services', 'cz_services_dep'])
 
 executable(
     'cz-gazette',
@@ -28,6 +29,7 @@ executable(
         cz_kay_dep,
         cz_marco_dep,
         cz_xdgkit_dep,
-        cz_asset_broker_dep
+        cz_asset_broker_dep,
+        cz_services_dep
     ],
     install : true)

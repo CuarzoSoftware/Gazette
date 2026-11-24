@@ -1,5 +1,4 @@
 #include <Core/Gazette.h>
-#include <Core/Server.h>
 #include <Core/Log.h>
 #include <Surfaces/BannerSurface.h>
 #include <Surfaces/CenterSurface.h>
@@ -45,7 +44,21 @@ Gazette::Gazette() noexcept
     loadSettings();
     banners = std::make_unique<BannerSurface>();
     center = std::make_unique<CenterSurface>();
-    server = std::make_unique<Server>();
+
+    // The D-Bus side: Gazette shows what it gets
+    SNotificationsServer::Handlers handlers;
+    handlers.notify = [this](const SNotification &n){ return notify(n); };
+    handlers.close = [this](UInt32 id){ close(id, Notification::CloseReason::Closed); };
+    handlers.centerState = [this]{ return SNotificationsServer::CenterState { centerShown(), m_dnd, UInt32(m_notifications.size()) }; };
+    handlers.toggleCenter = [this](const std::string &screen){ toggleCenter(screen); };
+    handlers.showCenter = [this](const std::string &screen){ showCenter(screen); };
+    handlers.hideCenter = [this]{ hideCenter(); };
+    handlers.setDoNotDisturb = [this](bool enabled){ setDoNotDisturb(enabled); };
+
+    server = SNotificationsServer::GetOrMake();
+    server->start(handlers, { .name = "Gazette", .vendor = "Cuarzo", .version = "0.1.0",
+                              .capabilities = { "actions", "body", "body-markup", "icon-static", "persistence" } });
+    onStateChanged.subscribe(this, [this]{ server->emitCenterState(); });
     initExposeWatch();
 }
 
@@ -89,6 +102,94 @@ Gazette::~Gazette() noexcept
 }
 
 /* -------------------------------------- Notifications -------------------------------------- */
+
+// image-data: premultiplied, as an image
+static std::shared_ptr<RImage> MakeImage(const SNotification::Image &image) noexcept
+{
+    auto ream { RCore::Get() };
+
+    if (!image.valid() || !ream || !ream->mainDevice())
+        return {};
+
+    const auto &formats { ream->mainDevice()->textureFormats().formats() };
+    const auto format { formats.find(DRM_FORMAT_ABGR8888) }; // R, G, B, A bytes
+
+    if (format == formats.end())
+        return {};
+
+    std::vector<UInt8> rgba(image.rgba.size());
+
+    for (size_t i = 0; i < rgba.size(); i += 4)
+    {
+        const UInt32 a { image.rgba[i + 3] };
+        rgba[i + 0] = UInt8((image.rgba[i + 0] * a + 127) / 255);
+        rgba[i + 1] = UInt8((image.rgba[i + 1] * a + 127) / 255);
+        rgba[i + 2] = UInt8((image.rgba[i + 2] * a + 127) / 255);
+        rgba[i + 3] = UInt8(a);
+    }
+
+    RPixelBufferInfo info {};
+    info.pixels = rgba.data();
+    info.stride = UInt32(image.width * 4);
+    info.format = format->format();
+    info.size = SkISize::Make(image.width, image.height);
+    info.alphaType = kPremul_SkAlphaType;
+    return RImage::MakeFromPixels(info, *format);
+}
+
+// image-path: a file (or file:// URI), else an icon name
+static std::shared_ptr<RImage> LoadImagePath(std::string path) noexcept
+{
+    if (path.starts_with("file://"))
+        path = path.substr(7);
+
+    if (path.empty() || path.front() != '/')
+        return GetGazette()->loadIcon(path, 64);
+
+    auto ream { RCore::Get() };
+
+    if (!ream || !ream->mainDevice())
+        return {};
+
+    const auto &formats { ream->mainDevice()->textureFormats().formats() };
+
+    if (auto fmt { formats.find(DRM_FORMAT_ARGB8888) }; fmt != formats.end())
+        return RImage::LoadFile(path, *fmt, { 256, 256 });
+
+    return {};
+}
+
+UInt32 Gazette::notify(const SNotification &sent) noexcept
+{
+    auto n { std::make_shared<Notification>() };
+    static_cast<SNotification&>(*n) = sent;
+
+    // Shown as plain text (body-markup is removed)
+    n->summary = SNotificationsServer::PlainText(n->summary);
+    n->body = SNotificationsServer::PlainText(n->body);
+
+    // An icon name as image-path (e.g. notify-send -i sends it so, app_icon empty): the app's icon
+    std::string imagePath { n->imagePath };
+    const bool imageIsFile { imagePath.starts_with("/") || imagePath.starts_with("file://") };
+
+    if (!imagePath.empty() && !imageIsFile && (n->appIcon.empty() || n->appIcon == imagePath))
+    {
+        n->appIcon = imagePath;
+        imagePath.clear();
+    }
+    else if (imagePath == n->appIcon)
+        imagePath.clear();
+
+    n->picture = n->image.valid() ? MakeImage(n->image) : (imagePath.empty() ? nullptr : LoadImagePath(imagePath));
+    n->image = {}; // Not kept (the picture is)
+
+    // The app's name from its .desktop entry if not given
+    if (n->appName.empty() && !n->desktopEntry.empty() && xdgkit)
+        if (auto entry { xdgkit->desktopEntry(n->desktopEntry) })
+            n->appName = entry->name;
+
+    return add(n, n->replaces);
+}
 
 std::shared_ptr<Notification> Gazette::find(UInt32 id) const noexcept
 {
