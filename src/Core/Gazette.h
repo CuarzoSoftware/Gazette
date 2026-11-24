@@ -2,7 +2,7 @@
 #define GAZETTE_H
 
 #include <Core/Notification.h>
-#include <CZ/Services/SNotificationsServer.h>
+#include <CZ/Services/SVNotificationsServer.h>
 #include <CZ/Core/CZObject.h>
 #include <CZ/Core/CZSignal.h>
 #include <filesystem>
@@ -24,7 +24,7 @@ class CenterSurface;
  *   Disturb is on. Banners hide after a while (critical ones and those with expire_timeout 0 stay),
  *   the notification stays in the notification center.
  * - The notification center (see CenterSurface) slides from the right: Do Not Disturb and the
- *   list. Toggled by Firmament's notifications button (org.cuarzo.Gazette.ToggleCenter, see SNotificationsServer).
+ *   list. Toggled by Firmament's notifications button (org.cuarzo.Gazette.ToggleCenter, see SVNotificationsServer).
  *
  * Do Not Disturb is saved to ~/.config/cz-gazette/gazette.conf. Opening Exposé or switching
  * workspaces (Crystals' ExposeChanged and WorkspaceChanged signals) hides the notification center.
@@ -38,7 +38,7 @@ public:
     std::shared_ptr<MApp> marco;        ///< The Wayland app
     std::shared_ptr<XDGKit> xdgkit;     ///< Icon themes and .desktop entries (apps' names and icons)
     std::shared_ptr<ABCore> ab;         ///< Icons, shared with the other apps when the asset broker runs
-    std::shared_ptr<SNotificationsServer> server; ///< The D-Bus side (see notify())
+    std::shared_ptr<SVNotificationsServer> server; ///< The D-Bus side (see notify())
     std::unique_ptr<BannerSurface> banners;  ///< The banners
     std::unique_ptr<CenterSurface> center;   ///< The notification center
 
@@ -48,11 +48,11 @@ public:
     std::shared_ptr<Notification> find(UInt32 id) const noexcept;
 
     /**
-     * @brief A notification arrived (Notify, see SNotificationsServer): prepares it for showing
+     * @brief A notification arrived (Notify, see SVNotificationsServer): prepares it for showing
      *        (plain text, the app's name, its icon and image) and adds it.
      * @return Its id.
      */
-    UInt32 notify(const SNotification &sent) noexcept;
+    UInt32 notify(const SVNotification &sent) noexcept;
 
     /**
      * @brief Adds @p n (or replaces the one with its id if it's still there, else it gets a new id).
@@ -101,7 +101,7 @@ public:
     /// Loads a themed icon by name.
     std::shared_ptr<RImage> loadIcon(const std::string &name, Int32 size) noexcept;
 
-    /// Center shown, Do Not Disturb or the count changed (see SNotificationsServer::emitCenterState()).
+    /// Center shown, Do Not Disturb or the count changed (see SVNotificationsServer::emitCenterState()).
     CZSignal<> onStateChanged;
 
     /// A notification was added, replaced or removed.

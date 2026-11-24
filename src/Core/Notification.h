@@ -1,7 +1,7 @@
 #ifndef NOTIFICATION_H
 #define NOTIFICATION_H
 
-#include <CZ/Services/SNotification.h>
+#include <CZ/Services/SVNotification.h>
 #include <chrono>
 #include <memory>
 #include <string>
@@ -19,10 +19,10 @@ using namespace CZ;
 /**
  * @brief A notification as Gazette shows it (see Gazette::notify()).
  *
- * What was sent (SNotification, read by SNotificationsServer), with its summary and body as plain
+ * What was sent (SVNotification, read by SVNotificationsServer), with its summary and body as plain
  * text, the app's name from its .desktop entry if not given, and its icon and image loaded.
  */
-struct Notification : public SNotification
+struct Notification : public SVNotification
 {
     UInt32 id { 0 };                 ///< Never 0 (Notify's replaces_id uses it for "none")
     std::shared_ptr<RImage> picture; ///< The image (image-data / image-path hint), shown at the right

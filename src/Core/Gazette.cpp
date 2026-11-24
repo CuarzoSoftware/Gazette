@@ -46,16 +46,16 @@ Gazette::Gazette() noexcept
     center = std::make_unique<CenterSurface>();
 
     // The D-Bus side: Gazette shows what it gets
-    SNotificationsServer::Handlers handlers;
-    handlers.notify = [this](const SNotification &n){ return notify(n); };
+    SVNotificationsServer::Handlers handlers;
+    handlers.notify = [this](const SVNotification &n){ return notify(n); };
     handlers.close = [this](UInt32 id){ close(id, Notification::CloseReason::Closed); };
-    handlers.centerState = [this]{ return SNotificationsServer::CenterState { centerShown(), m_dnd, UInt32(m_notifications.size()) }; };
+    handlers.centerState = [this]{ return SVNotificationsServer::CenterState { centerShown(), m_dnd, UInt32(m_notifications.size()) }; };
     handlers.toggleCenter = [this](const std::string &screen){ toggleCenter(screen); };
     handlers.showCenter = [this](const std::string &screen){ showCenter(screen); };
     handlers.hideCenter = [this]{ hideCenter(); };
     handlers.setDoNotDisturb = [this](bool enabled){ setDoNotDisturb(enabled); };
 
-    server = SNotificationsServer::GetOrMake();
+    server = SVNotificationsServer::GetOrMake();
     server->start(handlers, { .name = "Gazette", .vendor = "Cuarzo", .version = "0.1.0",
                               .capabilities = { "actions", "body", "body-markup", "icon-static", "persistence" } });
     onStateChanged.subscribe(this, [this]{ server->emitCenterState(); });
@@ -104,7 +104,7 @@ Gazette::~Gazette() noexcept
 /* -------------------------------------- Notifications -------------------------------------- */
 
 // image-data: premultiplied, as an image
-static std::shared_ptr<RImage> MakeImage(const SNotification::Image &image) noexcept
+static std::shared_ptr<RImage> MakeImage(const SVNotification::Image &image) noexcept
 {
     auto ream { RCore::Get() };
 
@@ -159,14 +159,14 @@ static std::shared_ptr<RImage> LoadImagePath(std::string path) noexcept
     return {};
 }
 
-UInt32 Gazette::notify(const SNotification &sent) noexcept
+UInt32 Gazette::notify(const SVNotification &sent) noexcept
 {
     auto n { std::make_shared<Notification>() };
-    static_cast<SNotification&>(*n) = sent;
+    static_cast<SVNotification&>(*n) = sent;
 
     // Shown as plain text (body-markup is removed)
-    n->summary = SNotificationsServer::PlainText(n->summary);
-    n->body = SNotificationsServer::PlainText(n->body);
+    n->summary = SVNotificationsServer::PlainText(n->summary);
+    n->body = SVNotificationsServer::PlainText(n->body);
 
     // An icon name as image-path (e.g. notify-send -i sends it so, app_icon empty): the app's icon
     std::string imagePath { n->imagePath };

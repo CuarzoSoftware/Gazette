@@ -19,7 +19,7 @@ The notifications daemon of Cuarzo OS (`cz-gazette`), built on Marco and Kay, li
 
 Gazette implements the [Desktop Notifications Specification](https://specifications.freedesktop.org/notification-spec/latest/) 1.2 (`org.freedesktop.Notifications` on the user bus): `Notify`, `CloseNotification`, `GetCapabilities`, `GetServerInformation`, and the `NotificationClosed` and `ActionInvoked` signals.
 
-Both interfaces come from [Services](https://github.com/CuarzoSoftware/Services) (`SNotificationsServer`); apps send notifications and control the center with its `SNotificationsClient`.
+Both interfaces come from [Services](https://github.com/CuarzoSoftware/Services) (`SVNotificationsServer`); apps send notifications and control the center with its `SVNotificationsClient`.
 
 - **Capabilities:** `actions`, `body`, `body-markup`, `icon-static` and `persistence`.
 - **Markup:** bodies are shown as plain text, without their markup.
