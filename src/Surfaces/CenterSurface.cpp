@@ -3,6 +3,7 @@
 #include <CZ/Marco/MScreen.h>
 #include <CZ/AK/AKApp.h>
 #include <CZ/AK/AKTheme.h>
+#include <CZ/AK/Effects/AKBackgroundEffect.h>
 #include <CZ/Core/CZEase.h>
 #include <CZ/Core/Events/CZPointerButtonEvent.h>
 #include <CZ/Core/Events/CZPointerMoveEvent.h>
@@ -22,7 +23,16 @@ static constexpr Int32 PanelRadius { 18 };
 static const MBlurMaterial PanelMaterial { 12.f, 1.5f, { 0x99EEEEEE, 0x99222222 } };
 static constexpr UInt32 ClockMs { 30000 };
 static constexpr SkScalar ListGap { 10.f + NotificationCard::CloseOverhang * 0.5f };
-static constexpr UInt32 RemoveMs { 360 };    // Slides out (first half), then its room collapses
+static constexpr UInt32 AddMs { 420 };       // Its room opens while it comes down and fades in
+static constexpr UInt32 RemoveMs { 420 };    // The inverse: its room closes while it goes up and fades out
+static constexpr UInt32 ClearMs { 260 };     // All of them at once: they just fade out
+
+// A card's room in the list (0: closed, 1: open), as a top margin: closed, it's right above its
+// place, behind the previous card (or the scroll's top edge)
+static void SetRoom(NotificationCard &card, SkScalar room) noexcept
+{
+    card.layout().setMargin(YGEdgeTop, -(card.layout().calculatedHeight() + ListGap) * (1.f - room));
+}
 static constexpr SkScalar HeaderHeight { 28.f }; // Fixed: Clear All comes and goes without moving the rest
 
 static const CZAdaptiveColor CardColor { 0x80FFFFFF, 0x2EFFFFFF };
@@ -32,6 +42,20 @@ static void Passive(AKNode &node) noexcept
 {
     const SkRegion empty;
     node.setInputRegion(&empty);
+}
+
+// AKRenderable opacity is per node: applied to every node of the tree, and to their background
+// effects (e.g. the card's shadow, which isn't one of its children)
+static void SetTreeOpacity(AKNode &node, SkScalar opacity) noexcept
+{
+    if (auto *renderable { dynamic_cast<AKRenderable*>(&node) })
+        renderable->setOpacity(opacity);
+
+    for (AKBackgroundEffect *effect : node.backgroundEffects())
+        effect->setOpacity(opacity);
+
+    for (AKNode *child : node.children(true))
+        SetTreeOpacity(*child, opacity);
 }
 
 static void SetupText(AKText &text, SkScalar size, SkFontStyle::Weight weight, CZAdaptiveColor color) noexcept
@@ -121,6 +145,7 @@ CenterSurface::CenterSurface() noexcept
     // The list (scrolls)
     m_scroll.layout().setFlex(1.f);
     m_scroll.layout().setMinHeight(0.f);
+    m_scroll.enableChildrenClipping(true); // New cards come down from behind its top edge
     m_list.layout().setPadding(YGEdgeBottom, 4.f);
 
     // Room for the cards' close buttons (over their top left corner)
@@ -160,6 +185,13 @@ void CenterSurface::show(MScreen *screen) noexcept
         return;
 
     m_shown = true;
+
+    // Still sliding out on another screen: it starts over on this one
+    if (mapped() && screen && screen != this->screen())
+    {
+        m_anim.pause();
+        setMapped(false);
+    }
 
     if (!mapped())
     {
@@ -221,6 +253,7 @@ void CenterSurface::rebuild() noexcept
             shown.push_back(n);
 
     std::vector<std::unique_ptr<NotificationCard>> cards;
+    std::vector<NotificationCard*> added;
 
     for (const auto &n : shown)
     {
@@ -240,52 +273,131 @@ void CenterSurface::rebuild() noexcept
             if (m_list.children().size() > 1)
                 card->insertBefore(m_list.children().front());
 
+            added.push_back(card.get());
             cards.emplace_back(std::move(card));
         }
     }
 
+    // All of them at once (Clear All): they just fade out in place, nothing to pull up
+    const bool collapse { !cards.empty() };
+
     for (auto &card : m_cards)
         if (card)
-            removeCard(std::move(card));
+            removeCard(std::move(card), collapse);
 
     m_cards = std::move(cards);
+
+    for (NotificationCard *card : added)
+        addCard(card);
+
     updateEmpty();
     update();
 }
 
-void CenterSurface::removeCard(std::unique_ptr<NotificationCard> card) noexcept
+void CenterSurface::addCard(NotificationCard *card) noexcept
 {
+    // Hidden: just there when shown
+    if (!m_shown || !mapped())
+        return;
+
+    // Its height (the room to open), with the margin and opacity reset in case it's reused
+    card->layout().setMargin(YGEdgeTop, 0.f);
+    layout().calculate();
+
+    auto adding { std::make_unique<Adding>() };
+    Adding *a { adding.get() };
+    a->card = card;
+
+    const auto apply { [this, a](Float64 t){
+        NotificationCard &c { *a->card };
+
+        // Its room opens: from right above (behind the scroll's top edge) down to its place
+        a->room = SkScalar(CZEase::OutCubic(t));
+        SetRoom(c, a->room);
+
+        // Fades in a bit behind, visible once mostly in place
+        a->opacity = SkScalar(CZEase::InOutQuad(std::clamp((t - 0.15) / 0.85, 0.0, 1.0)));
+        SetTreeOpacity(c, a->opacity);
+        update();
+    }};
+
+    apply(0.0);
+    a->anim.setDuration(AddMs);
+    a->anim.onUpdate.subscribe(this, [apply](CZAnimation *anim){ apply(anim->value()); });
+    a->anim.onFinish.subscribe(this, [this, a](CZAnimation*){
+        CZTimer::OneShot(0, [this, a](CZTimer*){
+            if (std::find_if(m_adding.begin(), m_adding.end(), [a](const auto &x){ return x.get() == a; }) != m_adding.end())
+                finishAdding(a->card);
+        });
+    });
+
+    m_adding.emplace_back(std::move(adding));
+    a->anim.start();
+}
+
+void CenterSurface::finishAdding(NotificationCard *card) noexcept
+{
+    // In place (finished, or removed / hidden before)
+    auto it { std::find_if(m_adding.begin(), m_adding.end(), [card](const auto &x){ return x->card == card; }) };
+
+    if (it == m_adding.end())
+        return;
+
+    (*it)->anim.pause();
+    card->layout().setMargin(YGEdgeTop, 0.f);
+    SetTreeOpacity(*card, 1.f);
+    m_adding.erase(it);
+    update();
+}
+
+void CenterSurface::removeCard(std::unique_ptr<NotificationCard> card, bool collapse) noexcept
+{
+    // From where it is if still entering
+    SkScalar room { 1.f }, opacity { 1.f };
+
+    for (const auto &a : m_adding)
+        if (a->card == card.get())
+        {
+            room = a->room;
+            opacity = a->opacity;
+        }
+
+    finishAdding(card.get());
+
     // Hidden: gone right away
     if (!m_shown || !mapped())
         return;
 
     auto removing { std::make_unique<Removing>() };
     Removing *r { removing.get() };
-    r->height = card->layout().calculatedHeight();
     r->card = std::move(card);
+    r->room = room;
+    r->opacity = opacity;
+    r->collapse = collapse;
     r->card->setHovered(false);
-    r->card->enableChildrenClipping(true);
     const SkRegion empty;
     r->card->setInputRegion(&empty);
 
-    r->anim.setDuration(RemoveMs);
-    r->anim.onUpdate.subscribe(this, [this, r](CZAnimation *a){
-        const Float64 t { a->value() };
+    const auto apply { [this, r](Float64 t){
         NotificationCard &c { *r->card };
 
-        if (t < 0.5)
-            c.layout().setPosition(YGEdgeLeft, (PanelWidth + Margin) * SkScalar(CZEase::InOutQuad(t * 2.0)));
-        else
+        if (!r->collapse)
         {
-            // Its room (and the gap after it) closes
-            const SkScalar u { SkScalar(CZEase::InOutQuad((t - 0.5) * 2.0)) };
-            c.setVisible(false);
-            c.layout().setHeight(r->height * (1.f - u));
-            c.layout().setMargin(YGEdgeBottom, -ListGap * u);
+            SetTreeOpacity(c, r->opacity * (1.f - SkScalar(CZEase::InOutQuad(t))));
+            update();
+            return;
         }
 
+        // Its room closes, slowly at first: it goes up under the previous card, already faded
+        // out by then (it's drawn over it)
+        SetRoom(c, r->room * (1.f - SkScalar(CZEase::InOutCubic(t))));
+        SetTreeOpacity(c, r->opacity * (1.f - SkScalar(CZEase::InOutQuad(std::clamp(t / 0.5, 0.0, 1.0)))));
         update();
-    });
+    }};
+
+    apply(0.0);
+    r->anim.setDuration(collapse ? RemoveMs : ClearMs);
+    r->anim.onUpdate.subscribe(this, [apply](CZAnimation *a){ apply(a->value()); });
     r->anim.onFinish.subscribe(this, [this, r](CZAnimation*){
         CZTimer::OneShot(0, [this, r](CZTimer*){
             std::erase_if(m_removing, [r](const auto &x){ return x.get() == r; });

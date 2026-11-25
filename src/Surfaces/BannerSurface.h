@@ -12,7 +12,8 @@
 #include <memory>
 
 /**
- * @brief New notifications as banners at the top right of the default screen (like macOS).
+ * @brief New notifications as banners at the top right of a screen (like macOS), Gazette makes one
+ *        per screen.
  *
  * A layer surface (overlay layer, below the top bar's exclusive zone) with a column of cards,
  * newest at the top, at most MaxBanners. They slide in from the right edge of the screen and out
@@ -35,7 +36,14 @@ public:
     static constexpr SkScalar DismissFraction { 0.3f };  ///< Dragged this far (of its width) to the right: hidden
     static constexpr SkScalar DismissVelocity { 0.6f };  ///< Or released this fast (logical px per ms, a flick)
 
-    BannerSurface() noexcept;
+    /// The banners of @p screen.
+    BannerSurface(MScreen *screen) noexcept;
+
+    /// The screen it shows the banners on.
+    MScreen *bannerScreen() const noexcept { return m_screen; }
+
+    /// Its screen was unplugged: every banner goes right away (it's destroyed a bit later).
+    void retire() noexcept;
 
     /// Shows a banner for @p notification (sliding in, at the top).
     void show(std::shared_ptr<Notification> notification) noexcept;
@@ -96,6 +104,8 @@ private:
     void restartTimers(UInt32 ms) noexcept;
     void updateHover() noexcept;
     void updateShape() noexcept;
+    MScreen *m_screen { nullptr };
+    bool m_retired { false };
     MVibrancyView m_column { this }; // The cards (blurred, masked to them, see updateShape())
     std::list<std::unique_ptr<Banner>> m_banners; // Newest first
     Drag m_drag;

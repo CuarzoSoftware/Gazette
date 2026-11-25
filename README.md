@@ -32,8 +32,8 @@ The desktop uses `org.cuarzo.Gazette` at `/org/cuarzo/Gazette`:
 | `ToggleCenter(s screen)`, `ShowCenter(s screen)` | The notification center on the screen with that name (e.g. `DP-1`), or the primary one if the name is empty or not found |
 | `HideCenter()` | Hides the notification center |
 | `SetDoNotDisturb(b enabled)` | Turns Do Not Disturb on or off |
-| `GetState() → (b centerShown, b doNotDisturb, u count)` | The current state |
-| `StateChanged(b centerShown, b doNotDisturb, u count)` | Signal: emitted when any of them changes |
+| `GetState() → (b centerShown, b doNotDisturb, u count, s screen)` | The current state (`screen`: the name of the screen the center is shown on, empty if hidden) |
+| `StateChanged(b centerShown, b doNotDisturb, u count, s screen)` | Signal: emitted when any of them changes |
 
 ```sh
 notify-send -a Firefox -i firefox "Download complete" "report.pdf has finished downloading."

@@ -34,7 +34,7 @@ static SkRect RectIn(const AKNode &node, const AKNode &root) noexcept
     return rect;
 }
 
-BannerSurface::BannerSurface() noexcept
+BannerSurface::BannerSurface(MScreen *screen) noexcept : m_screen(screen)
 {
     setColor(CZAdaptiveColor(0));
     setBlurMaterial(MBlurMaterial::Popover);
@@ -66,14 +66,12 @@ SkScalar BannerSurface::Distance() noexcept
 
 void BannerSurface::show(std::shared_ptr<Notification> notification) noexcept
 {
-    if (!notification)
+    if (!notification || m_retired)
         return;
 
     if (!mapped())
     {
-        if (MScreen *screen { GetGazette()->defaultScreen() })
-            setScreen(screen);
-
+        setScreen(m_screen);
         setMapped(true);
     }
 
@@ -135,6 +133,16 @@ void BannerSurface::show(std::shared_ptr<Notification> notification) noexcept
             leave(*banner);
 
     update();
+}
+
+void BannerSurface::retire() noexcept
+{
+    m_retired = true;
+    m_drag = {};
+    m_hovered = false;
+    m_screen = nullptr;
+    m_banners.clear();
+    setMapped(false);
 }
 
 void BannerSurface::replace(std::shared_ptr<Notification> notification) noexcept
@@ -323,7 +331,7 @@ void BannerSurface::dragEnd() noexcept
             // Hidden (still in the center; transient ones are closed)
             const UInt32 id { b->card->notification()->id };
             leave(*b);
-            CZTimer::OneShot(0, [id](CZTimer*){ GetGazette()->bannerExpired(id); });
+            CZTimer::OneShot(0, [id](CZTimer*){ GetGazette()->bannerDismissed(id); });
         }
         else
             slideTo(*b, 0.f, HideMs);

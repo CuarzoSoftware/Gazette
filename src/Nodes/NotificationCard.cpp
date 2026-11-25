@@ -357,12 +357,8 @@ void NotificationCard::colorSchemeEvent(const CZColorSchemeEvent &e)
 void NotificationCard::updateColors() noexcept
 {
     const CZColorScheme scheme { colorScheme() };
-    CZAdaptiveColor color { m_style == Style::Banner ? CZAdaptiveColor(0) : ListColor };
-
-    // Pressed: the list's cards darken; banners stay as they are
-    if (m_pressed && m_style == Style::List)
-        color = AKTheme::ControlPressedFill;
-
+    // Not tinted while pressed
+    const CZAdaptiveColor color { m_style == Style::Banner ? CZAdaptiveColor(0) : ListColor };
     setBackgroundColor(color.resolve(scheme));
     m_shadow.setColor((m_style == Style::Banner ? BannerShadowColor : ListShadowColor).resolve(scheme));
 }

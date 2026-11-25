@@ -4,6 +4,7 @@
 #include <Surfaces/CenterSurface.h>
 #include <CZ/Marco/MApp.h>
 #include <CZ/Marco/MScreen.h>
+#include <CZ/Core/CZTimer.h>
 #include <CZ/XDG/XDGKit.h>
 #include <CZ/XDG/XDGDesktopEntry.h>
 #include <CZ/XDG/XDGINI.h>
@@ -42,14 +43,24 @@ Gazette::Gazette() noexcept
         ab->setXDGKit(xdgkit);
 
     loadSettings();
-    banners = std::make_unique<BannerSurface>();
     center = std::make_unique<CenterSurface>();
+
+    // Banners on every screen
+    for (MScreen *screen : marco->screens())
+        screenPlugged(*screen);
+
+    marco->onScreenPlugged.subscribe(this, [this](MScreen &screen){ screenPlugged(screen); });
+    marco->onScreenUnplugged.subscribe(this, [this](MScreen &screen){ screenUnplugged(screen); });
 
     // The D-Bus side: Gazette shows what it gets
     SVNotificationsServer::Handlers handlers;
     handlers.notify = [this](const SVNotification &n){ return notify(n); };
     handlers.close = [this](UInt32 id){ close(id, Notification::CloseReason::Closed); };
-    handlers.centerState = [this]{ return SVNotificationsServer::CenterState { centerShown(), m_dnd, UInt32(m_notifications.size()) }; };
+    handlers.centerState = [this]{
+        const bool shown { centerShown() };
+        MScreen *screen { shown ? center->screen() : nullptr };
+        return SVNotificationsServer::CenterState { shown, m_dnd, UInt32(m_notifications.size()), screen ? screen->props().name : std::string() };
+    };
     handlers.toggleCenter = [this](const std::string &screen){ toggleCenter(screen); };
     handlers.showCenter = [this](const std::string &screen){ showCenter(screen); };
     handlers.hideCenter = [this]{ hideCenter(); };
@@ -91,13 +102,36 @@ void Gazette::initExposeWatch() noexcept
         }, nullptr, nullptr);
 }
 
+void Gazette::screenPlugged(MScreen &screen) noexcept
+{
+    for (const auto &b : banners)
+        if (b->bannerScreen() == &screen)
+            return;
+
+    banners.emplace_back(std::make_unique<BannerSurface>(&screen));
+}
+
+void Gazette::screenUnplugged(MScreen &screen) noexcept
+{
+    const auto it { std::find_if(banners.begin(), banners.end(), [&screen](const auto &b){ return b->bannerScreen() == &screen; }) };
+
+    if (it == banners.end())
+        return;
+
+    // Destroyed later: callbacks of its banners may still be queued (they find none by then)
+    std::shared_ptr<BannerSurface> retired { std::move(*it) };
+    banners.erase(it);
+    retired->retire();
+    CZTimer::OneShot(1000, [retired](CZTimer*){});
+}
+
 Gazette::~Gazette() noexcept
 {
     sd_bus_slot_unref(m_exposeMatch);
     sd_bus_slot_unref(m_workspaceMatch);
     server.reset();
     center.reset();
-    banners.reset();
+    banners.clear();
     _gazette = nullptr;
 }
 
@@ -215,7 +249,8 @@ UInt32 Gazette::add(std::shared_ptr<Notification> n, UInt32 replacesId) noexcept
 
             n->id = replacesId;
             old = n;
-            banners->replace(n);
+            for (auto &b : banners)
+                b->replace(n);
             onNotificationsChanged.notify();
             onStateChanged.notify();
             return n->id;
@@ -231,7 +266,8 @@ UInt32 Gazette::add(std::shared_ptr<Notification> n, UInt32 replacesId) noexcept
 
     // Do Not Disturb: only to the center (critical ones too, like macOS's Focus by default)
     if (!m_dnd && !center->shown())
-        banners->show(n);
+        for (auto &b : banners)
+            b->show(n);
 
     onNotificationsChanged.notify();
     onStateChanged.notify();
@@ -248,7 +284,8 @@ void Gazette::close(UInt32 id, Notification::CloseReason reason) noexcept
         return;
 
     m_notifications.erase(it);
-    banners->remove(id);
+    for (auto &b : banners)
+        b->remove(id);
     server->emitClosed(id, reason);
     onNotificationsChanged.notify();
     onStateChanged.notify();
@@ -273,6 +310,14 @@ void Gazette::bannerExpired(UInt32 id) noexcept
         close(id, Notification::CloseReason::Expired);
 }
 
+void Gazette::bannerDismissed(UInt32 id) noexcept
+{
+    for (auto &b : banners)
+        b->remove(id);
+
+    bannerExpired(id);
+}
+
 void Gazette::clearAll() noexcept
 {
     std::vector<UInt32> ids;
@@ -293,7 +338,8 @@ void Gazette::setDoNotDisturb(bool enabled) noexcept
     saveSettings();
 
     if (m_dnd)
-        banners->hideAll();
+        for (auto &b : banners)
+            b->hideAll();
 
     onStateChanged.notify();
 }
@@ -314,7 +360,8 @@ void Gazette::showCenter(const std::string &screen) noexcept
         return;
 
     // The banners are in the list too
-    banners->hideAll();
+    for (auto &b : banners)
+        b->hideAll();
     center->show(screenNamed(screen));
     onStateChanged.notify();
 }

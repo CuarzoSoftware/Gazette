@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <list>
 #include <memory>
+#include <vector>
 
 namespace CZ { class MApp; class MScreen; class XDGKit; class ABCore; class CZBus; }
 struct sd_bus_slot;
@@ -20,7 +21,7 @@ class CenterSurface;
  *
  * - Keeps the notifications (newest first) until they're closed: by the user, by their app
  *   (CloseNotification), or by invoking one of their actions (unless resident).
- * - New ones are shown as banners at the top right of the screen (see BannerSurface), unless Do Not
+ * - New ones are shown as banners at the top right of every screen (see BannerSurface), unless Do Not
  *   Disturb is on. Banners hide after a while (critical ones and those with expire_timeout 0 stay),
  *   the notification stays in the notification center.
  * - The notification center (see CenterSurface) slides from the right: Do Not Disturb and the
@@ -39,7 +40,7 @@ public:
     std::shared_ptr<XDGKit> xdgkit;     ///< Icon themes and .desktop entries (apps' names and icons)
     std::shared_ptr<ABCore> ab;         ///< Icons, shared with the other apps when the asset broker runs
     std::shared_ptr<SVNotificationsServer> server; ///< The D-Bus side (see notify())
-    std::unique_ptr<BannerSurface> banners;  ///< The banners
+    std::vector<std::unique_ptr<BannerSurface>> banners; ///< The banners, one surface per screen
     std::unique_ptr<CenterSurface> center;   ///< The notification center
 
     /// Newest first.
@@ -68,6 +69,9 @@ public:
 
     /// Its banner timed out: transient notifications are closed, the rest stay in the center.
     void bannerExpired(UInt32 id) noexcept;
+
+    /// Its banner was dragged away on a screen: it leaves the other screens too, then see bannerExpired().
+    void bannerDismissed(UInt32 id) noexcept;
 
     /// Closes every notification (Dismissed).
     void clearAll() noexcept;
@@ -112,6 +116,8 @@ private:
     void loadSettings() noexcept;
     void saveSettings() noexcept;
     void initExposeWatch() noexcept;
+    void screenPlugged(MScreen &screen) noexcept;
+    void screenUnplugged(MScreen &screen) noexcept;
     std::shared_ptr<CZBus> m_bus;
     sd_bus_slot *m_exposeMatch {}, *m_workspaceMatch {};
     std::list<std::shared_ptr<Notification>> m_notifications;

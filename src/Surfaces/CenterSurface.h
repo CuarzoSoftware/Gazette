@@ -88,16 +88,29 @@ private:
     AKText m_empty { "No Notifications", &m_panel };
     std::vector<std::unique_ptr<NotificationCard>> m_cards; // Newest first
 
-    // A closed notification's card leaving the list: it slides out to the right, then its room
-    // collapses (see removeCard())
+    // A closed notification's card leaving the list: the inverse of Adding, it goes up fading out
+    // while its room closes, pulling the older ones up (see removeCard())
     struct Removing
     {
         std::unique_ptr<NotificationCard> card;
         CZLinearAnimation anim;
-        SkScalar height { 0.f };
+        SkScalar room { 1.f }, opacity { 1.f }; // Where it starts (removed while still entering)
+        bool collapse { true }; // False: just fades out in place (all of them cleared at once)
     };
     std::list<std::unique_ptr<Removing>> m_removing;
-    void removeCard(std::unique_ptr<NotificationCard> card) noexcept;
+    void removeCard(std::unique_ptr<NotificationCard> card, bool collapse) noexcept;
+
+    // A new notification's card entering the list (at the top): its room opens, pushing the
+    // others down, while it comes down from above fading in (see addCard())
+    struct Adding
+    {
+        NotificationCard *card;
+        CZLinearAnimation anim;
+        SkScalar room { 0.f }, opacity { 0.f }; // Current (see Removing)
+    };
+    std::list<std::unique_ptr<Adding>> m_adding;
+    void addCard(NotificationCard *card) noexcept;
+    void finishAdding(NotificationCard *card) noexcept;
     void updateEmpty() noexcept;
 
     CZLinearAnimation m_anim;
